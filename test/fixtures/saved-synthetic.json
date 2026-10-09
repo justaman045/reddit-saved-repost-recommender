@@ -1,0 +1,204 @@
+{
+  "kind": "Listing",
+  "data": {
+    "after": null,
+    "dist": 11,
+    "modhash": "synthetic-fixture-not-real-data",
+    "children": [
+      {
+        "kind": "t3",
+        "data": {
+          "name": "t3_ext1",
+          "id": "ext1",
+          "title": "A very popular external article",
+          "author": "user_one",
+          "subreddit": "interesting",
+          "url": "https://example.com/article?utm_source=x&utm_medium=y",
+          "permalink": "/r/interesting/article1/",
+          "score": 42000,
+          "upvote_ratio": 0.96,
+          "num_comments": 1200,
+          "created_utc": 1699827200,
+          "is_self": false,
+          "domain": "example.com"
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "name": "t3_img1",
+          "id": "img1",
+          "title": "Nice photo",
+          "author": "user_two",
+          "subreddit": "pics",
+          "url": "https://i.redd.it/abc123.jpg",
+          "permalink": "/r/pics/img1/",
+          "score": 15000,
+          "upvote_ratio": 0.98,
+          "num_comments": 300,
+          "created_utc": 1697408000,
+          "is_self": false,
+          "domain": "i.redd.it"
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "name": "t3_gal1",
+          "id": "gal1",
+          "title": "Four-image gallery",
+          "author": "user_three",
+          "subreddit": "pics",
+          "url": "https://www.reddit.com/gallery/t3_gal1",
+          "permalink": "/r/pics/gal1/",
+          "score": 6400,
+          "upvote_ratio": 0.94,
+          "num_comments": 210,
+          "created_utc": 1695000000,
+          "is_self": false,
+          "is_gallery": true,
+          "domain": "reddit.com"
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "name": "t3_vid1",
+          "id": "vid1",
+          "title": "Short video",
+          "author": "user_four",
+          "subreddit": "videos",
+          "url": "https://v.redd.it/xyz789",
+          "permalink": "/r/videos/vid1/",
+          "score": 800,
+          "upvote_ratio": 0.9,
+          "num_comments": 50,
+          "created_utc": 1691360000,
+          "is_self": false,
+          "is_video": true,
+          "domain": "v.redd.it"
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "name": "t3_self1",
+          "id": "self1",
+          "title": "An askreddit style text post",
+          "author": "user_five",
+          "subreddit": "AskReddit",
+          "url": "https://www.reddit.com/r/AskReddit/self1/",
+          "permalink": "/r/AskReddit/self1/",
+          "score": 55,
+          "upvote_ratio": 0.88,
+          "num_comments": 42,
+          "created_utc": 1699136000,
+          "is_self": true,
+          "domain": "self.AskReddit",
+          "selftext": "Some body text\nsecond line"
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "name": "t3_neg1",
+          "id": "neg1",
+          "title": "Downvoted and missing ratio",
+          "author": "user_six",
+          "subreddit": "unpopular",
+          "url": "https://example.org/post",
+          "permalink": "/r/unpopular/neg1/",
+          "score": -15,
+          "num_comments": 3,
+          "created_utc": 1665440000,
+          "is_self": false,
+          "domain": "example.org"
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "name": "t3_htm1",
+          "id": "htm1",
+          "title": "Free <script>alert(1)</script> \"quotes\" & 'apostrophes'",
+          "author": "user_seven",
+          "subreddit": "testing",
+          "url": "https://example.com/weird",
+          "permalink": "/r/testing/htm1/",
+          "score": 10,
+          "upvote_ratio": null,
+          "num_comments": 1,
+          "created_utc": 1699568000,
+          "is_self": false,
+          "domain": "example.com"
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "name": "t3_cro1",
+          "id": "cro1",
+          "title": "A crosspost",
+          "author": "user_eight",
+          "subreddit": "aww",
+          "url": "https://www.reddit.com/r/orig/post1/",
+          "permalink": "/r/aww/cro1/",
+          "score": 900,
+          "upvote_ratio": 0.97,
+          "num_comments": 15,
+          "created_utc": 1697000000,
+          "is_self": false,
+          "domain": "reddit.com",
+          "crosspost_parent": "t3_orig1"
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "name": "t3_low1",
+          "id": "low1",
+          "title": "A quiet little link",
+          "author": "user_nine",
+          "subreddit": "niche",
+          "url": "https://example.net/small",
+          "permalink": "/r/niche/low1/",
+          "score": 5,
+          "upvote_ratio": 0.7,
+          "num_comments": 1,
+          "created_utc": 1699568000,
+          "is_self": false,
+          "domain": "example.net"
+        }
+      },
+      {
+        "kind": "t1",
+        "data": {
+          "name": "t1_cmt1",
+          "id": "cmt1",
+          "subreddit": "interesting",
+          "link_id": "t3_ext1",
+          "body": "a saved comment that must be filtered out",
+          "score": 12
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "name": "t3_ext1",
+          "id": "ext1",
+          "title": "A very popular external article (duplicate entry)",
+          "author": "user_one",
+          "subreddit": "interesting",
+          "url": "https://example.com/article?utm_source=x&utm_medium=y",
+          "permalink": "/r/interesting/article1/",
+          "score": 42000,
+          "upvote_ratio": 0.96,
+          "num_comments": 1200,
+          "created_utc": 1699827200,
+          "is_self": false,
+          "domain": "example.com"
+        }
+      }
+    ]
+  }
+}

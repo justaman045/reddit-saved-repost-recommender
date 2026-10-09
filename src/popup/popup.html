@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Saved Repost Recommender</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="srr-header">
+      <h1>Saved Repost Recommender</h1>
+      <span id="user" class="srr-user"></span>
+    </header>
+
+    <section id="view-guidance" class="srr-panel" hidden>
+      <p>Open <strong>reddit.com</strong> in the active tab (and make sure you are logged in), then click this extension icon again.</p>
+      <p class="srr-dim">The extension only works from a logged-in Reddit tab — it never asks for credentials or API keys.</p>
+    </section>
+
+    <main id="view-app" hidden>
+      <div id="error" class="srr-error" hidden></div>
+
+      <div id="progress" class="srr-progress" hidden>
+        <span id="progress-text">Fetching…</span>
+        <div class="srr-bar"><div id="progress-fill" class="srr-bar-fill"></div></div>
+      </div>
+
+      <div class="srr-toolbar">
+        <button id="refresh" class="srr-btn srr-primary" type="button">Fetch saved posts</button>
+        <button id="fetch-submitted" class="srr-btn" type="button">Check my posts</button>
+        <span id="fetch-note" class="srr-dim"></span>
+      </div>
+
+            <div class="srr-filters">
+        <label>Min score <input id="f-minscore" type="number" min="0" step="1" value="0" /></label>
+        <label
+          >Subreddit
+          <select id="f-sub">
+            <option value="">all</option>
+          </select>
+        </label>
+        <label class="srr-check"><input id="f-hidequeued" type="checkbox"  /> Hide queued</label>
+        <label class="srr-check"><input id="f-hidesubmitted" type="checkbox" /> Hide posts I already submitted</label>
+        <label class="srr-check"><input id="f-prefill" type="checkbox" /> Prefill-ready only</label>
+        <label class="srr-check"><input id="f-enableunsave" type="checkbox" /> Enable unsave actions</label>
+        <label class="srr-check"><input id="f-enablenotes" type="checkbox" /> Enable notes</label>
+      </div>
+      <div class="srr-toolbar" style="margin-bottom:10px">
+        <button id="btn-export-csv" type="button" class="srr-btn">Export CSV</button>
+        <button id="btn-export-json" type="button" class="srr-btn">Export JSON</button>
+      </div>
+      <p id="empty" class="srr-dim" hidden></p>
+      <div id="list"></div>
+      <div class="srr-footer">
+        <button id="more" class="srr-btn" type="button" hidden>Show more</button>
+        <span id="truncated" class="srr-dim" hidden
+          >Reddit serves at most ~1000 saved items — older saves are not available.</span
+        >
+      </div>
+      <p class="srr-dim srr-disclaimer">Check each subreddit's rules — reposting may be banned. This extension never posts for you.</p>
+    </main>
+
+    <div id="toast" class="srr-toast" hidden></div>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

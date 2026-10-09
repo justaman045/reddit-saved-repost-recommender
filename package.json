@@ -1,0 +1,39 @@
+{
+  "name": "reddit-saved-repost-recommender",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-only, read-only Chrome MV3 extension that ranks saved Reddit posts by engagement and opens pre-filled repost drafts.",
+  "license": "MIT",
+  "author": "Aman <coderaman07@gmail.com>",
+  "homepage": "https://github.com/justaman045/reddit-saved-repost-recommender#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/justaman045/reddit-saved-repost-recommender.git"
+  },
+  "bugs": {
+    "url": "https://github.com/justaman045/reddit-saved-repost-recommender/issues"
+  },
+  "keywords": [
+    "chrome-extension",
+    "manifest-v3",
+    "reddit",
+    "bookmarks",
+    "saved-posts",
+    "javascript",
+    "privacy-first"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:e2e": "node test/e2e/extension.e2e.mjs",
+    "icons": "node scripts/generate-icons.mjs",
+    "social": "node scripts/generate-social.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.1",
+    "playwright-core": "^1.64.0"
+  }
+}

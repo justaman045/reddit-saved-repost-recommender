@@ -48,6 +48,24 @@ pre-filled repost drafts. Plain ES modules, no bundler, no build step.
   `innerHTML`/`outerHTML`, `eval`/`new Function`, `setInterval`, `chrome.alarms`, MAIN-world injection.
 - Fixture is synthetic only (`test/fixtures/saved-synthetic.json`); never commit real Reddit data.
 
+## render.js invariants (enforced by test/render.test.js — don't regress)
+- The "ratio missing" badge keyed off `scoreInfo.ratioMissing` (the item-level object
+  popup passes at popup.js:223), NOT `post.scoreInfo`.
+- `safeExternalHref` returns the ORIGINAL string (validated http(s) only), not the
+  URL-normalized form — the Open link's `href` must equal `post.url` exactly.
+- The Open button renders only for a safe external `url`. Fallback to the reddit
+  permalink happens ONLY when the post has no `url` at all; an unsafe url
+  (e.g. `javascript:`) means no Open button.
+
+## CI / publishing
+- Repo: github.com/justaman045/reddit-saved-repost-recommender (public, remote `origin`).
+- CI matrix = Node 18/20/22 (`npm ci` + `npm test`); release workflow zips
+  `manifest.json` + `src/` + `icons/` on `v*` tags. Both in `.github/workflows/`.
+- `jsdom` must stay on `^25`: jsdom >= 26 needs Node > 20 and breaks the Node 18/20 CI
+  legs. `.github/dependabot.yml` ignores jsdom major bumps — keep that rule if you touch it.
+- GitHub has NO API for the social preview image: `npm run social` regenerates
+  `assets/social-preview.png`, but uploading it in Settings → Social preview is manual.
+
 ## Manual smoke test
 1. Load unpacked from the repo root in Chrome; be logged into reddit.com in the active tab.
 2. Popup → Fetch saved posts; verify progress, ranking, ratio "n/a" cases, queue behavior.

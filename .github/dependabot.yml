@@ -9,6 +9,11 @@ updates:
       dev-dependencies:
         patterns:
           - "*"
+    ignore:
+      # jsdom >= 26 requires Node > 20; the repo supports Node >= 18 (CI matrix).
+      - dependency-name: "jsdom"
+        update-types:
+          - "version-update:semver-major"
   - package-ecosystem: github-actions
     directory: /
     schedule:

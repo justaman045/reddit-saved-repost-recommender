@@ -1,0 +1,61 @@
+name: Stable Release
+
+# Publishes a rolling "stable" GitHub Release (marked Latest) from the tip of
+# main/master on every push. Versioned releases stay handled by release.yml on
+# v* tags. The rolling tag is deliberately named "stable" (not v*) so it can
+# never re-trigger release.yml.
+
+on:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: write
+
+# Serialize runs so two quick pushes can't race on the same tag.
+concurrency:
+  group: stable-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Gate on tests
+        run: npm test
+
+      - name: Read manifest version
+        id: meta
+        run: echo "version=$(node -p "require('./manifest.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Build extension zip
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          mkdir -p dist
+          zip -r "dist/saved-repost-recommender-v${VERSION}-build.${GITHUB_RUN_NUMBER}.zip" manifest.json src icons
+
+      - name: Publish rolling stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          # Move the single rolling "stable" release to this commit.
+          gh release delete stable --yes --cleanup-tag 2>/dev/null || true
+          git push origin ":refs/tags/stable" 2>/dev/null || true
+          gh release create stable dist/*.zip \
+            --target "$GITHUB_SHA" \
+            --title "v${VERSION} (build ${GITHUB_RUN_NUMBER})" \
+            --latest \
+            --notes "Automated build from \`${GITHUB_REF_NAME}\` @ ${GITHUB_SHA:0:7} — $(git log -1 --pretty=%s)"

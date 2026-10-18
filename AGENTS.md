@@ -74,8 +74,13 @@ pre-filled repost drafts. Plain ES modules, no bundler, no build step.
 
 ## CI / publishing
 - Repo: github.com/justaman045/reddit-saved-repost-recommender (public, remote `origin`).
-- CI matrix = Node 18/20/22 (`npm ci` + `npm test`); release workflow zips
-  `manifest.json` + `src/` + `icons/` on `v*` tags. Both in `.github/workflows/`.
+- CI matrix = Node 18/20/22 (`npm ci` + `npm test`) in `ci.yml`.
+- `release.yml` zips `manifest.json` + `src/` + `icons/` and publishes a versioned
+  release on `v*` tags (manual version bumps).
+- `stable-release.yml` runs on every push to main/master: test gate → zip → republish a
+  rolling `stable` tag/release marked **Latest** (title carries the manifest version +
+  run number). Its tag name avoids the `v*` prefix on purpose so it can't collide with
+  `release.yml`. All three live in `.github/workflows/`.
 - `jsdom` must stay on `^25`: jsdom >= 26 needs Node > 20 and breaks the Node 18/20 CI
   legs. `.github/dependabot.yml` ignores jsdom major bumps — keep that rule if you touch it.
 - GitHub has NO API for the social preview image: `npm run social` regenerates

@@ -49,7 +49,7 @@ export function exportCSV(filtered, meta = {}, nowMs = Date.now()) {
       p.score ?? '',
       (typeof p.upvoteRatio === 'number' ? p.upvoteRatio : ''),
       p.numComments ?? '',
-      ageDays(p.createdUtc, Date.now()),
+      ageDays(p.createdUtc, nowMs),
       p.permalink || '',
       p.url || '',
       p.contentKey || '',

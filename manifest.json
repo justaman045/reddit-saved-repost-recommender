@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Saved Repost Recommender",
-  "version": "0.1.0",
-  "description": "Rank your saved Reddit posts by engagement and open pre-filled repost drafts. Local-only and read-only: never posts, votes, or saves.",
+  "version": "0.1.1",
+  "description": "Rank your saved Reddit posts by engagement and open pre-filled repost drafts. Local-only and privacy-first: the only write is an opt-in, per-item unsave.",
   "permissions": ["activeTab", "scripting", "storage"],
   "action": {
     "default_popup": "src/popup/popup.html",

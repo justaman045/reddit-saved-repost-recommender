@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 // Function sandbox so its IIFE registers globalThis.__SRR__ for tests.
 const src = readFileSync(new URL('../src/content/fetcher.js', import.meta.url), 'utf8');
 const load = new Function(`${src}\n;return globalThis.__SRR__;`);
-const { fetchAll, LIMITS } = load();
+const { fetchAll, fetchUnsave, LIMITS } = load();
 
 function fakeStore(initial = {}) {
   const data = { ...initial };
@@ -224,4 +224,115 @@ test('exposes the same LIMITS as documented', () => {
   assert.equal(LIMITS.MAX_PAGES, 12);
   assert.equal(LIMITS.PAGE_LIMIT, 100);
   assert.equal(LIMITS.LOCK_STALE_MS, 120000);
+});
+
+// --- fetchUnsave (the only write action) ---
+
+test('fetchUnsave rejects a bad id without touching the network', async () => {
+  delete globalThis.__SRR_MODHASH__;
+  let called = 0;
+  const fetchFn = async () => {
+    called += 1;
+    return jsonResponse({});
+  };
+  await assert.rejects(() => fetchUnsave('nope', { fetchFn }), (e) => e.kind === 'bad-id');
+  await assert.rejects(() => fetchUnsave(42, { fetchFn }), (e) => e.kind === 'bad-id');
+  await assert.rejects(() => fetchUnsave('', { fetchFn }), (e) => e.kind === 'bad-id');
+  assert.equal(called, 0);
+});
+
+test('fetchUnsave POSTs id + modhash with the X-Modhash header', async () => {
+  delete globalThis.__SRR_MODHASH__;
+  const calls = [];
+  const fetchFn = async (url, opts) => {
+    calls.push({ url, opts });
+    return jsonResponse({});
+  };
+  const res = await fetchUnsave('t3_abc123', {
+    fetchFn,
+    modhash: 'MOD',
+    delayFn: async () => {},
+    now: () => 2000000,
+  });
+  assert.deepEqual(res, { ok: true });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://www.reddit.com/api/unsave');
+  assert.equal(calls[0].opts.method, 'POST');
+  assert.equal(calls[0].opts.headers['X-Modhash'], 'MOD');
+  assert.equal(calls[0].opts.body, 'id=t3_abc123&uh=MOD');
+});
+
+test('fetchUnsave without any modhash fails as session and never POSTs', async () => {
+  delete globalThis.__SRR_MODHASH__;
+  const calls = [];
+  const fetchFn = async (url) => {
+    calls.push(String(url));
+    if (String(url).includes('/api/me.json')) return jsonResponse({ kind: 'DM', data: { name: 'tester' } });
+    throw new Error('must not POST without a modhash');
+  };
+  await assert.rejects(
+    () => fetchUnsave('t3_abc123', { fetchFn, delayFn: async () => {}, now: () => 3000000 }),
+    (e) => e.kind === 'session',
+  );
+  assert.deepEqual(calls, ['/api/me.json?raw_json=1']);
+});
+
+test('fetchUnsave fetches and caches the modhash from /api/me.json when missing', async () => {
+  delete globalThis.__SRR_MODHASH__;
+  const calls = [];
+  const fetchFn = async (url) => {
+    calls.push(String(url));
+    if (String(url).includes('/api/me.json')) {
+      return jsonResponse({ kind: 'DM', data: { name: 'tester', modhash: 'MEH' } });
+    }
+    return jsonResponse({});
+  };
+  const res = await fetchUnsave('t3_abc123', { fetchFn, delayFn: async () => {}, now: () => 4000000 });
+  assert.equal(res.ok, true);
+  assert.deepEqual(calls, ['/api/me.json?raw_json=1', 'https://www.reddit.com/api/unsave']);
+  assert.equal(globalThis.__SRR_MODHASH__, 'MEH');
+  delete globalThis.__SRR_MODHASH__;
+});
+
+test('fetchUnsave maps 429 to rate-limited (with Retry-After) and 403 to session', async () => {
+  delete globalThis.__SRR_MODHASH__;
+  await assert.rejects(
+    () =>
+      fetchUnsave('t3_abc123', {
+        fetchFn: async () => jsonResponse({}, 429, { 'retry-after': '7' }),
+        modhash: 'M',
+        delayFn: async () => {},
+        now: () => 5000000,
+      }),
+    (e) => e.kind === 'rate-limited' && e.retryAfterMs === 7000,
+  );
+  await assert.rejects(
+    () =>
+      fetchUnsave('t3_abc123', {
+        fetchFn: async () => jsonResponse({}, 403),
+        modhash: 'M',
+        delayFn: async () => {},
+        now: () => 6000000,
+      }),
+    (e) => e.kind === 'session',
+  );
+});
+
+test('fetchUnsave enforces the min gap between writes', async () => {
+  delete globalThis.__SRR_MODHASH__;
+  const gaps = [];
+  const fetchFn = async () => jsonResponse({});
+  // Prime the last-unsave timestamp.
+  await fetchUnsave('t3_abc123', { fetchFn, modhash: 'M', delayFn: async () => {}, now: () => 10000000 });
+  // Immediately after, the throttle must delay the next write.
+  await fetchUnsave('t3_def456', {
+    fetchFn,
+    modhash: 'M',
+    delayFn: async (ms) => gaps.push(ms),
+    now: () => 10000500,
+    random: () => 0,
+  });
+  assert.equal(gaps.length, 1);
+  assert.ok(gaps[0] > 0 && gaps[0] <= 900, `expected a positive delay <= 900, got ${gaps[0]}`);
+  delete globalThis.__SRR_LAST_UNSAVE__;
 });

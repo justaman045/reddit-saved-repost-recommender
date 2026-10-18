@@ -1,5 +1,6 @@
 // Injected on demand into a reddit.com tab (classic script — no ES imports).
-// Read-only: only GET /api/me.json and GET /saved.json. Never mutates anything.
+// Read APIs: GET /api/me.json, /saved.json and /user/{name}/submitted.json.
+// The single write is the opt-in unsave: POST /api/unsave (see fetchUnsave).
 // Limits below must match src/lib/limits.js FETCH (test/limits-sync.test.js enforces).
 (function () {
   'use strict';
@@ -273,7 +274,8 @@
         }
         pages += 1;
         emit({ type: 'SRR_SUBMITTED_PROGRESS', pages: pages, count: children.length });
-        await store.set({ submittedMeta: { fetching: true, fetchStartedAt: startedAt, progress: { pages: pages, count: children.length } } });
+        const sMetaNow = (await store.get('submittedMeta')) || {};
+        await store.set({ submittedMeta: Object.assign({}, sMetaNow, { progress: { pages: pages, count: children.length } }) });
         after = typeof data.after === 'string' && data.after.length > 0 ? data.after : null;
         if (!after) break;
       }
@@ -301,7 +303,8 @@
         at: now(),
       };
       if (e && Number.isFinite(e.retryAfterMs)) error.retryAfterMs = e.retryAfterMs;
-      await store.set({ submittedMeta: { fetching: false, progress: null, error: error } });
+      const sMetaNow = (await store.get('submittedMeta')) || {};
+      await store.set({ submittedMeta: Object.assign({}, sMetaNow, { fetching: false, progress: null, error: error }) });
       emit({ type: 'SRR_SUBMITTED_DONE', ok: false, error: error });
       return { ok: false, reason: error.kind, error: error };
     }

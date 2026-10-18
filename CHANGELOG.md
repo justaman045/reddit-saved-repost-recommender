@@ -6,6 +6,44 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-18
+
+### Fixed
+
+- Export CSV/JSON buttons crashed on click — `globalThis.__filtered` was never
+  defined. Exports now go through the same rank → filter → paginate pipeline
+  (`getFiltered`) as the list view, so the exported rows always match the screen.
+- The "Show more" button had no effect: the display limit was read from the
+  persisted UI prefs instead of the running limit. Paging now has a single
+  source of truth.
+- The opt-in unsave never worked — the popup's `SRR_UNSAVE` message had no
+  handler. It now runs `fetchUnsave` in the injected script and, on success,
+  removes the post from the stored list so it stays gone.
+- The Repost button skipped the documented flow (self-post body copied to the
+  clipboard, confirmation toast, auto-queue): the rows wired an inline shortcut
+  instead of the full handler.
+- The "Already posted by you" badge and export's `submitted_matched` could never
+  match — posts carried no `contentKey`, so the submitted index lookup always
+  missed.
+- "Check my posts" progress and error updates clobbered `submittedMeta`,
+  dropping the username and fetched-at timestamp after an error.
+- Note textareas are no longer built when notes are disabled, and in-progress
+  edits survive the re-renders triggered by fetch progress events.
+- `npm run test:e2e` actually runs now: the harness loaded `test/` instead of the
+  repo root as the extension (no `manifest.json` there, so the service worker
+  could never start), used `launch()` where extensions need
+  `launchPersistentContext`, and called `assert` without importing it. The
+  browser is also resolved explicitly (`CHROME_EXECUTABLE` → cached Playwright
+  Chromium → system Chrome) because branded Chrome >= 137 ignores
+  `--load-extension`.
+
+### Changed
+
+- README no longer advertises tags: the tag helpers exist in
+  `src/lib/notes.js`, but there is no UI to set them.
+- `manifest.json` / `package.json` descriptions now mention the opt-in unsave
+  exception instead of claiming strict read-only.
+
 ## [0.1.0] - 2026-10-10
 
 ### Added
@@ -25,5 +63,6 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Test suite (`node:test`) including a security-posture test, plus an optional
   Playwright E2E smoke test.
 
-[Unreleased]: https://github.com/justaman045/reddit-saved-repost-recommender/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/justaman045/reddit-saved-repost-recommender/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/justaman045/reddit-saved-repost-recommender/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/justaman045/reddit-saved-repost-recommender/releases/tag/v0.1.0

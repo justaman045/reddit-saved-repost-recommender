@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { applyFilters, queueSets } from '../src/lib/select.js';
+import { applyFilters, queueSets, getFiltered, BASE_DISPLAY_LIMIT } from '../src/lib/select.js';
+import { contentKey } from '../src/lib/submit.js';
 import { parseChildren } from '../src/lib/parse.js';
 
 const fixture = JSON.parse(
@@ -64,4 +65,55 @@ test("filters by domain", () => {
   const res = applyFilters(posts, { domain: "example.com" });
   assert.equal(res.length, 1);
   assert.equal(res[0].name, "t3_a");
+});
+
+function stateOf(overrides = {}) {
+  return {
+    posts,
+    filters: { minScore: 0, subreddit: '', hideQueued: false, prefillOnly: false, hideSubmitted: false },
+    queue: {},
+    submitted: [],
+    displayLimit: BASE_DISPLAY_LIMIT,
+    ...overrides,
+  };
+}
+
+test('getFiltered ranks by score desc and attaches contentKey to every post', () => {
+  const { ranked, filtered, shown } = getFiltered(stateOf());
+  assert.equal(ranked.length, posts.length);
+  for (let i = 1; i < ranked.length; i++) {
+    assert.ok(ranked[i - 1].scoreInfo.total >= ranked[i].scoreInfo.total, 'must sort by total desc');
+  }
+  assert.ok(filtered.every((p) => typeof p.contentKey === 'string' && p.contentKey.length > 0));
+  assert.ok(shown.every((p) => typeof p.contentKey === 'string' && p.contentKey.length > 0));
+});
+
+test('getFiltered displayLimit slices shown but not filtered', () => {
+  const { filtered, shown, limit } = getFiltered(stateOf({ displayLimit: 2 }));
+  assert.equal(limit, 2);
+  assert.equal(shown.length, 2);
+  assert.ok(filtered.length > 2);
+});
+
+test('getFiltered defaults a missing displayLimit to the base', () => {
+  const { limit } = getFiltered({ posts, filters: {}, queue: {}, submitted: [] });
+  assert.equal(limit, BASE_DISPLAY_LIMIT);
+});
+
+test('getFiltered hideQueued drops queued posts by name', () => {
+  const first = posts[0].name;
+  const { filtered, sets } = getFiltered(stateOf({ filters: { hideQueued: true }, queue: { [first]: { queuedAt: 1 } } }));
+  assert.ok(sets.queuedNames.has(first));
+  assert.ok(!filtered.some((p) => p.name === first));
+});
+
+test('getFiltered attaches submittedMatch so the badge and export can see it', () => {
+  const target = posts.find((p) => p.url && p.url.startsWith('http')) || posts[0];
+  const submitted = [{ name: 't3_sub1', title: 'mine', permalink: '/r/x/comments/1/', url: target.url }];
+  submitted[0].contentKey = contentKey(submitted[0]);
+  const { filtered } = getFiltered(stateOf({ submitted }));
+  const match = filtered.find((p) => p.name === target.name);
+  assert.ok(match, 'post must be present');
+  assert.ok(match.submittedMatch, 'submittedMatch must be attached for the badge/export');
+  assert.equal(match.submittedMatch.name, 't3_sub1');
 });

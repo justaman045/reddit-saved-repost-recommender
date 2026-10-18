@@ -1,4 +1,8 @@
+import { rankPosts } from './score.js';
+import { submittedIndex } from './submitted.js';
 import { classify, contentKey } from './submit.js';
+
+export const BASE_DISPLAY_LIMIT = 100;
 
 export function applyFilters(posts, opts = {}) {
   const minScore = Number.isFinite(opts.minScore) ? opts.minScore : 0;
@@ -30,4 +34,34 @@ export function queueSets(queue) {
     if (entry && typeof entry.contentKey === 'string' && entry.contentKey) queuedKeys.add(entry.contentKey);
   }
   return { queuedNames, queuedKeys };
+}
+
+// Single source of truth for the popup's rank -> filter -> paginate pipeline.
+// refreshView and the export buttons both go through this so the exported rows
+// can never disagree with what the list shows.
+export function getFiltered(state) {
+  const posts = Array.isArray(state.posts) ? state.posts : [];
+  const filters = state.filters || {};
+  // parseChildren does not store contentKey on each post; compute it once here
+  // so queue/submitted matching and the "already posted" badge all key off the
+  // same value.
+  const ranked = rankPosts(posts).map((p) => (p.contentKey ? p : { ...p, contentKey: contentKey(p) }));
+  const sets = queueSets(state.queue);
+  const sIndex = submittedIndex(state.submitted);
+  const filtered = applyFilters(ranked, {
+    minScore: filters.minScore,
+    subreddit: filters.subreddit,
+    hideQueued: filters.hideQueued,
+    prefillOnly: filters.prefillOnly,
+    hideSubmitted: filters.hideSubmitted,
+    queuedNames: sets.queuedNames,
+    queuedKeys: sets.queuedKeys,
+    submittedKeys: sIndex.keys,
+  }).map((p) => {
+    const match = p.contentKey ? sIndex.byKey.get(p.contentKey) : undefined;
+    return match ? { ...p, submittedMatch: match } : p;
+  });
+  const limit =
+    Number.isFinite(state.displayLimit) && state.displayLimit > 0 ? state.displayLimit : BASE_DISPLAY_LIMIT;
+  return { ranked, sets, sIndex, filtered, shown: filtered.slice(0, limit), limit };
 }

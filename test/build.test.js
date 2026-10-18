@@ -33,3 +33,18 @@ test('build artifacts exist and are parseable', () => {
   assert.ok(fetcher.includes('/saved.json'));
   assert.ok(fetcher.includes('/api/me.json'));
 });
+
+test('background routes the unsave message into the injected fetcher', () => {
+  const bg = readFileSync(join(ROOT, 'src/background.js'), 'utf8');
+  assert.ok(bg.includes("'SRR_UNSAVE'"), 'background must handle SRR_UNSAVE');
+  assert.ok(bg.includes('fetchUnsave'), 'background must call the injected fetchUnsave');
+  assert.ok(bg.includes("files: ['src/content/fetcher.js']"), 'must ensure the fetcher is injected');
+});
+
+test('popup sends the tab id with unsave requests and uses getFiltered for export', () => {
+  const popup = readFileSync(join(ROOT, 'src/popup/popup.js'), 'utf8');
+  assert.ok(popup.includes("type: 'SRR_UNSAVE'"));
+  assert.ok(popup.includes('tabId: state.tabId'), 'unsave must name the target tab');
+  assert.ok(!popup.includes('__filtered'), 'the broken globalThis.__filtered shortcut must stay gone');
+  assert.ok(popup.includes('getFiltered('), 'export and list must share the getFiltered pipeline');
+});

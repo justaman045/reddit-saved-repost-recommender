@@ -12,3 +12,17 @@ test('exportCSV escapes commas', () => {
   const csv = exportCSV([{title:'a,b', score:1}]);
   assert.ok(csv.includes('"a,b"'));
 });
+
+test('exportCSV computes age_days from the provided nowMs', () => {
+  const created = 1700000000;
+  const nowMs = (created + 86400) * 1000; // exactly one day later
+  const csv = exportCSV([{ title: 't', createdUtc: created }], {}, nowMs);
+  const row = csv.split('\r\n')[1].split(',');
+  assert.equal(row[7], '1', 'age_days column must use nowMs, not Date.now()');
+});
+
+test('exportJSON includes username metadata when provided', () => {
+  const j = JSON.parse(exportJSON([], { username: 'tester' }, 123));
+  assert.equal(j.meta.username, 'tester');
+  assert.equal(j.exportedAt, 123);
+});

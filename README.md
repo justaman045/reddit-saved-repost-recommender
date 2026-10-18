@@ -29,8 +29,7 @@ again.
   so the same URL saved twice can't sneak back in.
 - **"Check my posts"** — fetch your submission history to detect posts you've
   already shared.
-- **Notes & tags** — attach a note and up to a few tags to any saved post (opt-in,
-  on by default).
+- **Notes** — attach a note to any saved post (opt-in, on by default).
 - **Export** — download the current filtered view as CSV or JSON.
 - **Opt-in unsave** — optionally unsave a post from the popup. This is the only
   write action and is off by default.
@@ -76,8 +75,9 @@ Node.js **≥ 18**.
 1. Open the popup while on a logged-in reddit.com tab. If you're elsewhere, it
    tells you to open Reddit first.
 2. **Fetch saved posts** pages through your saved list sequentially, throttled to
-   900–1400 ms between requests, deduplicated by post name, and capped at roughly
-   the first 1000 items (Reddit's own limit).
+   900–1400 ms between requests, deduplicated by post name *and* content key, and
+   capped at roughly the first 1000 items (Reddit's own limit). A fresh fetch is
+   allowed at most every 10 minutes; rate-limit backoff is honored automatically.
 3. The list is sorted by total score. Each row shows rank, title, subreddit, score,
    upvote ratio, comments, age, and the score breakdown. Posts with no
    `upvote_ratio` show "n/a" neutrally so they aren't unfairly penalized.
@@ -131,7 +131,7 @@ src/
     submit.js          # classify + build /submit URLs + contentKey
     parse.js           # normalize saved JSON
     submitted.js       # "already posted" index
-    notes.js           # per-post notes/tags
+    notes.js           # per-post notes
     export.js          # CSV/JSON export
     render.js          # safe (textContent-only) DOM rendering
 scripts/               # icon + social-preview generators

@@ -2,26 +2,32 @@ import { exportCSV, exportJSON, triggerDownload } from '../lib/export.js';
 import { normalizeNote } from '../lib/notes.js';
 import { FETCH } from '../lib/limits.js';
 import { parseChildren } from '../lib/parse.js';
-import { rankPosts } from '../lib/score.js';
-import { applyFilters, queueSets } from '../lib/select.js';
+import { BASE_DISPLAY_LIMIT, getFiltered, queueSets } from '../lib/select.js';
 import { contentKey, buildSubmitUrl, classify } from '../lib/submit.js';
 import { renderRows } from '../lib/render.js';
-import { submittedIndex } from '../lib/submitted.js';
 
 function buildNoteBlock(key, note) {
-  const wrapper = document.createElement("div");
-  wrapper.className = "srr-notes";
-  const ta = document.createElement("textarea");
-  ta.className = "srr-note-ta";
-  ta.placeholder = "Note (max 2000)";
-  ta.value = (note && note.note) || "";
+  const wrapper = document.createElement('div');
+  wrapper.className = 'srr-notes';
+  const ta = document.createElement('textarea');
+  ta.className = 'srr-note-ta';
+  ta.placeholder = 'Note (max 2000)';
+  ta.dataset.noteKey = key;
+  // An in-progress draft survives re-renders (progress events rebuild the list);
+  // once saved, the draft is cleared.
+  const draft = state.noteDrafts[key];
+  ta.value = typeof draft === 'string' ? draft : (note && note.note) || '';
+  ta.addEventListener('input', () => {
+    state.noteDrafts[key] = ta.value;
+  });
   const save = () => {
     const nv = normalizeNote({ note: ta.value, tags: [], updatedAt: Date.now() });
     state.notes[key] = nv;
+    delete state.noteDrafts[key];
     chrome.storage.local.set({ notes: state.notes }).catch(() => {});
   };
-  ta.addEventListener("blur", save);
-  ta.addEventListener("change", save);
+  ta.addEventListener('blur', save);
+  ta.addEventListener('change', save);
   wrapper.appendChild(ta);
   return wrapper;
 }
@@ -41,14 +47,22 @@ const state = {
   meta: {},
   posts: [],
   notes: {},
+  queue: {},
   filters: { minScore: 0, subreddit: '', hideQueued: false, prefillOnly: false, hideSubmitted: false },
-  ui: { displayLimit: 100, enableUnsave: false, enableNotes: true },
-  displayLimit: 100,
+  ui: { displayLimit: BASE_DISPLAY_LIMIT, enableUnsave: false, enableNotes: true },
+  displayLimit: BASE_DISPLAY_LIMIT,
+  unsaving: new Set(),
+  noteDrafts: {},
   lastStart: 0,
   toastTimer: 0,
   submitted: [],
   submittedMeta: {},
 };
+
+// Posts whose unsave is in flight stay hidden until background confirms.
+function currentPosts() {
+  return (state.posts || []).filter((p) => !state.unsaving.has(p.name));
+}
 
 function isRedditUrl(url) {
   return typeof url === 'string' && /^https?:\/\/([a-z0-9-]+\.)*reddit\.com\//i.test(url);
@@ -178,6 +192,46 @@ async function onToggleQueue(post) {
   toast(queued ? 'Removed from queue.' : 'Marked as queued.');
 }
 
+function unsaveErrorMessage(res) {
+  const reason = res && res.reason;
+  const messages = {
+    'bad-id': 'Could not unsave (unexpected post id).',
+    'no-tab': 'Open a reddit.com tab and try again.',
+    'no-api': 'Could not reach the Reddit tab — reload it and retry.',
+    'rate-limited': 'Reddit rate-limited the unsave. Try again in a minute.',
+    session: 'Reddit blocked the unsave (session expired?). Log in again and retry.',
+    network: 'Network error — the post was not unsaved.',
+    http: 'Reddit returned an error — the post was not unsaved.',
+    error: 'Could not unsave the post.',
+  };
+  return messages[reason] || 'Could not unsave the post.';
+}
+
+async function onUnsave(post) {
+  if (!state.ui.enableUnsave || !post || !post.name) return;
+  // Optimistic: hide the row while background runs fetchUnsave in the tab.
+  state.unsaving.add(post.name);
+  const q = { ...(state.queue || {}) };
+  delete q[post.name];
+  state.queue = q;
+  chrome.storage.local.set({ queue: q }).catch(() => {});
+  refreshView();
+
+  const res = await chrome.runtime
+    .sendMessage({ type: 'SRR_UNSAVE', id: post.name, tabId: state.tabId })
+    .catch(() => null);
+  if (res && res.ok === true) {
+    // Background already dropped the post from stored `raw`; clear the
+    // in-flight marker so the set can't grow unbounded.
+    state.unsaving.delete(post.name);
+    toast('Unsaved from your saved list.');
+  } else {
+    state.unsaving.delete(post.name);
+    toast(unsaveErrorMessage(res));
+    refreshView();
+  }
+}
+
 async function refreshView() {
   const stored = await chrome.storage.local.get(['raw', 'meta', 'queue', 'submitted', 'submittedMeta']);
   state.meta = stored.meta || {};
@@ -195,26 +249,21 @@ async function refreshView() {
   renderError(meta);
   rebuildSubredditOptions(state.posts);
 
-  const ranked = rankPosts(state.posts);
-  const sets = queueSets(state.queue);
-  const sIndex = submittedIndex(state.submitted);
-  const filtered = applyFilters(ranked, {
-    minScore: state.filters.minScore,
-    subreddit: state.filters.subreddit,
-    hideQueued: state.filters.hideQueued,
-    prefillOnly: state.filters.prefillOnly,
-    hideSubmitted: state.filters.hideSubmitted,
-    queuedNames: sets.queuedNames,
-    queuedKeys: sets.queuedKeys,
-    submittedKeys: sIndex.keys,
-  });
-  const shown = filtered.slice(0, (state.ui && state.ui.displayLimit) || state.displayLimit);
+  const { sets, filtered, shown, limit } = getFiltered({ ...state, posts: currentPosts() });
 
   const list = $('list');
+  // Remember which note textarea (if any) is being edited so the re-render
+  // below doesn't yank focus mid-typing.
+  const active = document.activeElement;
+  const focusNote =
+    active && active.classList && active.classList.contains('srr-note-ta') ? active : null;
+  const focusKey = focusNote ? focusNote.dataset.noteKey : null;
+  const selStart = focusNote ? focusNote.selectionStart : null;
+  const selEnd = focusNote ? focusNote.selectionEnd : null;
+
   renderRows(
     list,
     shown.map((post, index) => {
-      const sm = (sIndex.byKey || sIndex.map).get(post.contentKey);
       const key = post.name;
       const note = state.notes && state.notes[key] ? normalizeNote(state.notes[key]) : { note: '', tags: [] };
       return {
@@ -222,35 +271,35 @@ async function refreshView() {
         rank: index + 1,
         scoreInfo: post.scoreInfo,
         actions: {
-          onRepost: (p) => {
-            chrome.runtime
-              .sendMessage({ type: 'SRR_OPEN_SUBMIT', url: buildSubmitUrl(p), title: p.title })
-              .catch(() => {});
-          },
+          onRepost: onRepost,
           onToggleQueue: onToggleQueue,
-          onUnsave: (p) => {
-            if (!state.ui.enableUnsave) return;
-            chrome.runtime.sendMessage({ type: 'SRR_UNSAVE', id: p.name }).catch(() => {});
-            const q = { ...state.queue };
-            delete q[p.name];
-            const raw = (state.posts || []).filter((x) => x.name !== p.name);
-            chrome.storage.local.set({ queue: q }).catch(() => {});
-            state.queue = q;
-            state.posts = raw;
-            refreshView();
-          },
+          onUnsave: onUnsave,
         },
         queued: sets.queuedNames.has(post.name),
-        linkQueued: !sets.queuedNames.has(post.name) && sets.queuedKeys.has(contentKey(post)),
-        submittedMatch: sm || null,
+        linkQueued: !sets.queuedNames.has(post.name) && sets.queuedKeys.has(post.contentKey),
+        submittedMatch: post.submittedMatch || null,
         note: note,
         enableUnsave: state.ui.enableUnsave,
         enableNotes: state.ui.enableNotes,
-        noteBlock: buildNoteBlock(key, note),
+        noteBlock: state.ui.enableNotes ? buildNoteBlock(key, note) : null,
       };
     }),
     document
   );
+
+  if (focusKey) {
+    const ta = list.querySelector('[data-note-key="' + focusKey + '"]');
+    if (ta) {
+      ta.focus();
+      if (selStart != null) {
+        try {
+          ta.setSelectionRange(selStart, selEnd);
+        } catch (_e) {
+          /* selection unsupported */
+        }
+      }
+    }
+  }
 
   const empty = $('empty');
   if (state.posts.length === 0) {
@@ -264,7 +313,7 @@ async function refreshView() {
   }
 
   const more = $('more');
-  more.hidden = filtered.length <= ((state.ui && state.ui.displayLimit) || state.displayLimit);
+  more.hidden = filtered.length <= limit;
   $('truncated').hidden = !meta.truncated;
 }
 
@@ -311,31 +360,35 @@ async function onRefresh() {
   await refreshView();
 }
 
+function resetPaging() {
+  state.displayLimit = (state.ui && state.ui.displayLimit) || BASE_DISPLAY_LIMIT;
+}
+
 function bindFilters() {
   $('f-minscore').addEventListener('change', (e) => {
     const v = Number(e.target.value);
     state.filters.minScore = Number.isFinite(v) && v > 0 ? v : 0;
-    state.displayLimit = (state.ui && state.ui.displayLimit) || 100;
+    resetPaging();
     refreshView();
   });
   $('f-sub').addEventListener('change', (e) => {
     state.filters.subreddit = e.target.value;
-    state.displayLimit = (state.ui && state.ui.displayLimit) || 100;
+    resetPaging();
     refreshView();
   });
   $('f-hidequeued').addEventListener('change', (e) => {
     state.filters.hideQueued = e.target.checked;
-    state.displayLimit = (state.ui && state.ui.displayLimit) || 100;
+    resetPaging();
     refreshView();
   });
   $('f-prefill').addEventListener('change', (e) => {
     state.filters.prefillOnly = e.target.checked;
-    state.displayLimit = (state.ui && state.ui.displayLimit) || 100;
+    resetPaging();
     refreshView();
   });
   $('f-hidesubmitted').addEventListener('change', (e) => {
     state.filters.hideSubmitted = e.target.checked;
-    state.displayLimit = (state.ui && state.ui.displayLimit) || 100;
+    resetPaging();
     refreshView();
   });
   $('f-enableunsave').addEventListener('change', (e) => {
@@ -357,7 +410,7 @@ async function init() {
   $('refresh').addEventListener('click', onRefresh);
   $('fetch-submitted').addEventListener('click', onFetchSubmitted);
   $('more').addEventListener('click', () => {
-    state.displayLimit = ((state.ui && state.ui.displayLimit) || 100) + 100;
+    state.displayLimit += BASE_DISPLAY_LIMIT;
     refreshView();
   });
   bindFilters();
@@ -374,7 +427,7 @@ async function init() {
   try {
     const s = await chrome.storage.local.get(['ui', 'notes']);
     if (s.ui) {
-      if (s.ui.displayLimit) state.ui.displayLimit = s.ui.displayLimit;
+      if (s.ui.displayLimit) state.displayLimit = Number(s.ui.displayLimit) || BASE_DISPLAY_LIMIT;
       if (typeof s.ui.enableUnsave === 'boolean') state.ui.enableUnsave = s.ui.enableUnsave;
       $('f-enableunsave').checked = !!state.ui.enableUnsave;
       if (typeof s.ui.enableNotes === 'boolean') state.ui.enableNotes = s.ui.enableNotes;
@@ -384,13 +437,13 @@ async function init() {
   } catch (_e) {}
 
   $('btn-export-csv').addEventListener('click', () => {
-    const items = (globalThis.__filtered || [])(state);
-    const csv = exportCSV(items, {}, Date.now());
+    const { filtered } = getFiltered({ ...state, posts: currentPosts() });
+    const csv = exportCSV(filtered, { username: state.meta && state.meta.username }, Date.now());
     triggerDownload('srr-saved-' + new Date().toISOString().slice(0,19).replace(/[:]/g,'-') + '.csv', 'text/csv', csv);
   });
   $('btn-export-json').addEventListener('click', () => {
-    const items = (globalThis.__filtered || [])(state);
-    const json = exportJSON(items, {}, Date.now());
+    const { filtered } = getFiltered({ ...state, posts: currentPosts() });
+    const json = exportJSON(filtered, { username: state.meta && state.meta.username }, Date.now());
     triggerDownload('srr-saved-' + new Date().toISOString().slice(0,19).replace(/[:]/g,'-') + '.json', 'application/json', json);
   });
 

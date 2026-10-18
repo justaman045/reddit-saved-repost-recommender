@@ -6,6 +6,18 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- The "Fetch saved posts" button could get stuck **disabled forever**: an
+  interrupted fetch (tab navigated away mid-run) left `meta.fetching` set, and
+  the popup had no stale-lock recovery even though the fetcher recovers such
+  locks after 2 minutes. The popup now trusts the lock only while it can still
+  be running (`isFetchingLive`), for both the saved and the submitted fetch.
+- The 10-minute refresh floor disabled the button silently with no indication of
+  when (or whether) it would come back. The note now explains the lock
+  ("Refresh in Xm", or the rate-limit backoff) and a one-shot timer
+  re-enables the button the moment the floor expires while the popup is open.
+
 ## [0.1.1] - 2026-10-18
 
 ### Fixed

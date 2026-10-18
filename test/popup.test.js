@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isRedditUrl, refreshEnabled, fetchNote, ERROR_MESSAGES } from '../src/popup/popup.js';
+import { isRedditUrl, refreshEnabled, fetchNote, isFetchingLive, ERROR_MESSAGES } from '../src/popup/popup.js';
 import { FETCH } from '../src/lib/limits.js';
 
 test('importing popup.js has no side effects without a document', () => {
@@ -25,8 +25,15 @@ test('isRedditUrl only accepts real reddit.com hosts', () => {
 
 test('refreshEnabled enforces the floor and rate-limit backoff', () => {
   const now = Date.now();
-  assert.equal(refreshEnabled({ fetching: true }), false);
+  // Only a LIVE fetch blocks; a stale/interrupted one recovers like the fetcher does.
+  assert.equal(refreshEnabled({ fetching: true, fetchStartedAt: now }), false);
   assert.equal(refreshEnabled({}), true);
+  assert.equal(refreshEnabled({ fetching: true }), true, 'corrupt lock (no fetchStartedAt) recovers');
+  assert.equal(
+    refreshEnabled({ fetching: true, fetchStartedAt: now - FETCH.LOCK_STALE_MS - 1 }),
+    true,
+    'interrupted fetch recovers after the stale window',
+  );
   assert.equal(refreshEnabled({ fetchedAt: now }), false);
   assert.equal(refreshEnabled({ fetchedAt: now - FETCH.REFRESH_FLOOR_MS - 1 }), true);
   assert.equal(
@@ -46,12 +53,39 @@ test('refreshEnabled enforces the floor and rate-limit backoff', () => {
   assert.equal(refreshEnabled({ fetchedAt: now, error: { kind: 'network', at: now } }), true);
 });
 
+test('isFetchingLive only trusts locks that can still be running', () => {
+  const now = Date.now();
+  assert.equal(isFetchingLive(undefined), false);
+  assert.equal(isFetchingLive({}), false);
+  assert.equal(isFetchingLive({ fetching: false, fetchStartedAt: now }), false);
+  assert.equal(isFetchingLive({ fetching: true, fetchStartedAt: now }), true);
+  assert.equal(isFetchingLive({ fetching: true }), false, 'no fetchStartedAt means a corrupt lock');
+  assert.equal(isFetchingLive({ fetching: true, fetchStartedAt: now - FETCH.LOCK_STALE_MS - 1 }), false);
+});
+
 test('fetchNote describes state without throwing', () => {
   assert.equal(fetchNote({}), 'Not fetched yet.');
-  assert.equal(fetchNote({ fetching: true }), 'Fetching…');
-  assert.equal(fetchNote({ fetchedAt: Date.now() }), 'Fetched just now.');
-  assert.match(fetchNote({ fetchedAt: Date.now() - 5 * 60000 }), /Fetched 5m ago\./);
-  assert.match(fetchNote({ fetchedAt: Date.now() - 3 * 3600000 }), /Fetched 3h ago\./);
+  assert.equal(fetchNote({ fetching: true, fetchStartedAt: Date.now() }), 'Fetching…');
+  // An interrupted fetch must not claim to be fetching forever.
+  assert.equal(
+    fetchNote({ fetching: true, fetchStartedAt: Date.now() - FETCH.LOCK_STALE_MS - 1 }),
+    'Not fetched yet.',
+  );
+  // Within the floor the note explains when the button unlocks again.
+  assert.equal(fetchNote({ fetchedAt: Date.now() }), 'Fetched just now. Refresh in 10m.');
+  assert.match(
+    fetchNote({ fetchedAt: Date.now() - 5 * 60000 }),
+    /^Fetched 5m ago\. Refresh in 5m\.$/,
+  );
+  assert.match(fetchNote({ fetchedAt: Date.now() - 3 * 3600000 }), /^Fetched 3h ago\.$/);
+  // Rate-limit backoff is explained too.
+  assert.match(
+    fetchNote({
+      fetchedAt: Date.now() - 3 * 3600000,
+      error: { kind: 'rate-limited', at: Date.now(), retryAfterMs: 90000 },
+    }),
+    /^Fetched 3h ago\. Rate-limited — retry in 2m\.$/,
+  );
 });
 
 test('every fetcher error kind has user-facing copy', () => {

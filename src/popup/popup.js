@@ -53,6 +53,7 @@ const state = {
   displayLimit: BASE_DISPLAY_LIMIT,
   unsaving: new Set(),
   noteDrafts: {},
+  floorTimer: 0,
   lastStart: 0,
   toastTimer: 0,
   submitted: [],
@@ -91,17 +92,40 @@ async function copyText(text) {
   }
 }
 
+// meta.fetching is only trusted while the fetch it describes can still be
+// running. An interrupted fetch (tab navigated away mid-run, page crashed)
+// leaves the flag set forever; the fetcher recovers such stale locks after
+// LOCK_STALE_MS, and the popup must agree with it or the UI lies.
+function isFetchingLive(meta) {
+  if (!meta || !meta.fetching) return false;
+  const startedAt = Number(meta.fetchStartedAt) || 0;
+  return Date.now() - startedAt <= FETCH.LOCK_STALE_MS;
+}
+
 function fetchNote(meta) {
-  if (meta.fetching) return 'Fetching…';
+  if (isFetchingLive(meta)) return 'Fetching…';
   if (!meta.fetchedAt) return 'Not fetched yet.';
-  const minutes = Math.round((Date.now() - meta.fetchedAt) / 60000);
-  if (minutes < 1) return 'Fetched just now.';
-  if (minutes < 60) return `Fetched ${minutes}m ago.`;
-  return `Fetched ${Math.round(minutes / 60)}h ago.`;
+  const since = Date.now() - meta.fetchedAt;
+  const minutes = Math.round(since / 60000);
+  let base;
+  if (minutes < 1) base = 'Fetched just now.';
+  else if (minutes < 60) base = `Fetched ${minutes}m ago.`;
+  else base = `Fetched ${Math.round(minutes / 60)}h ago.`;
+  // Explain WHY the refresh button is locked instead of leaving it a mystery.
+  if (!refreshEnabled(meta)) {
+    if (meta.error && meta.error.kind === 'rate-limited') {
+      const until = (meta.error.at || 0) + (meta.error.retryAfterMs || 0);
+      const left = Math.max(1, Math.ceil((until - Date.now()) / 60000));
+      return `${base} Rate-limited — retry in ${left}m.`;
+    }
+    const left = Math.ceil((FETCH.REFRESH_FLOOR_MS - since) / 60000);
+    return `${base} Refresh in ${left}m.`;
+  }
+  return base;
 }
 
 function refreshEnabled(meta) {
-  if (meta.fetching) return false;
+  if (isFetchingLive(meta)) return false;
   if (meta.fetchedAt && !meta.error && Date.now() - meta.fetchedAt < FETCH.REFRESH_FLOOR_MS) return false;
   if (meta.error && meta.error.kind === 'rate-limited') {
     const until = (meta.error.at || 0) + (meta.error.retryAfterMs || 0);
@@ -112,7 +136,7 @@ function refreshEnabled(meta) {
 
 function renderProgress(meta) {
   const box = $('progress');
-  if (!meta.fetching) {
+  if (!isFetchingLive(meta)) {
     box.hidden = true;
     return;
   }
@@ -244,7 +268,18 @@ async function refreshView() {
   $('user').textContent = meta.username ? `u/${meta.username}` : '';
   $('fetch-note').textContent = fetchNote(meta) + (state.submittedMeta && state.submittedMeta.fetchedAt ? ` · submitted ${Math.round((Date.now()-state.submittedMeta.fetchedAt)/60000)}m ago.` : '');
   $('refresh').disabled = !refreshEnabled(meta);
-  $('fetch-submitted').disabled = state.submittedMeta && state.submittedMeta.fetching || (meta && meta.fetching);
+  $('fetch-submitted').disabled = isFetchingLive(state.submittedMeta) || isFetchingLive(meta);
+  // The refresh floor is purely a clock wait: schedule a one-shot re-render at
+  // expiry so the button re-enables itself even when no storage event fires
+  // while the popup stays open.
+  if (state.floorTimer) {
+    clearTimeout(state.floorTimer);
+    state.floorTimer = 0;
+  }
+  if ($('refresh').disabled && !isFetchingLive(meta) && meta.fetchedAt && !meta.error) {
+    const wait = meta.fetchedAt + FETCH.REFRESH_FLOOR_MS + 500 - Date.now();
+    if (wait > 0) state.floorTimer = setTimeout(refreshView, wait);
+  }
   renderProgress(meta);
   renderError(meta);
   rebuildSubredditOptions(state.posts);
@@ -304,7 +339,7 @@ async function refreshView() {
   const empty = $('empty');
   if (state.posts.length === 0) {
     empty.hidden = false;
-    empty.textContent = meta.fetching ? '' : 'No saved posts loaded yet — click "Fetch saved posts".';
+    empty.textContent = isFetchingLive(meta) ? '' : 'No saved posts loaded yet — click "Fetch saved posts".';
   } else if (filtered.length === 0) {
     empty.hidden = false;
     empty.textContent = 'No posts match the current filters.';
@@ -319,7 +354,7 @@ async function refreshView() {
 
 async function onFetchSubmitted() {
   if (state.tabId == null) return;
-  if (state.submittedMeta.fetching || (state.meta && state.meta.fetching)) {
+  if (isFetchingLive(state.submittedMeta) || isFetchingLive(state.meta)) {
     toast('Already fetching…');
     return;
   }
@@ -337,7 +372,7 @@ async function onFetchSubmitted() {
 async function onRefresh() {
   if (state.tabId == null) return;
   const now = Date.now();
-  if (state.meta.fetching || now - state.lastStart < 1500) {
+  if (isFetchingLive(state.meta) || now - state.lastStart < 1500) {
     toast('Already fetching…');
     return;
   }
@@ -469,5 +504,5 @@ if (typeof document !== 'undefined') {
   }
 }
 
-export { isRedditUrl, refreshEnabled, fetchNote, ERROR_MESSAGES };
+export { isRedditUrl, refreshEnabled, fetchNote, isFetchingLive, ERROR_MESSAGES };
 
